@@ -1,10 +1,10 @@
 <?php
 require 'vendor/autoload.php'; 
 
-$host = 'localhost';
-$db = 'canqualify'; 
+$host = '34.205.207.196';
+$db = 'paypal'; 
 $user = 'postgres'; 
-$pass = 'postgre'; 
+$pass = 'canqualify'; 
 $charset = 'utf8mb4';
 
 $dsn = "pgsql:host=$host;dbname=$db;user=$user;password=$pass"; 

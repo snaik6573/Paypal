@@ -23,13 +23,21 @@ $result = $gateway->transaction()->sale([
 ]);
 
 if ($result->success === true) {
-    $stmt = $pdo->prepare("INSERT INTO transactions (firstname, lastname, amount, transaction_id, status) VALUES (?, ?, ?, ?, ?)");
+    $cardType = 'Unknown'; // Default value
+
+    // Check if card details are present
+    if (isset($result->transaction->creditCard)) {
+        $cardType = $result->transaction->creditCard['cardType'] ?? 'Unknown'; // Accessing as an array
+    }
+
+    $stmt = $pdo->prepare("INSERT INTO transactions (firstname, lastname, amount, transaction_id, status, card_type) VALUES (?, ?, ?, ?, ?, ?)");
     $stmt->execute([
         $_POST['firstname'],
         $_POST['lastname'],
         $_POST['amount'],
         $result->transaction->id,
-        'successful'
+        'successful',
+        $cardType // Store the specific card type
     ]);
 } else {
     echo "Error: " . $result->message;
@@ -64,6 +72,8 @@ if ($result->success === true) {
         <input type="text" disabled="disabled" name="Id" value="<?php echo htmlspecialchars($result->transaction->id); ?>"><br>
         <label for="status" class="heading">Status</label><br>
         <input type="text" disabled="disabled" name="status" value="successful"><br>
+        <label for="card_type" class="heading">Card Type</label><br>
+        <input type="text" disabled="disabled" name="card_type" value="<?php echo htmlspecialchars($cardType); ?>"><br>
     </form>
 </body>
 </html>
