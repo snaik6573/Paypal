@@ -1,6 +1,5 @@
 <?php
 require 'vendor/autoload.php'; 
-
 $host = '34.205.207.196';
 $db = 'paypal'; 
 $user = 'postgres'; 

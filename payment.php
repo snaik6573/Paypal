@@ -6,45 +6,70 @@ error_reporting(E_ALL);
 require "boot.php"; 
 
 if (empty($_POST['payment_method_nonce'])) {
+    echo "Nonce not provided.";
+    print_r($_POST); 
     header('location:index.php');
     exit();
 }
 
-$result = $gateway->transaction()->sale([
-    'amount' => $_POST['amount'],
-    'paymentMethodNonce' => $_POST['payment_method_nonce'],
-    'customer' => [
-        'firstName' => $_POST['firstname'],
-        'lastName' => $_POST['lastname'],
-    ],
-    'options' => [
-        'submitForSettlement' => true
-    ]
+$customerResult = $gateway->customer()->create([
+    'firstName' => $_POST['firstname'],
+    'lastName' => $_POST['lastname'],
 ]);
 
-if ($result->success === true) {
-    $cardType = 'Unknown'; // Default value
-
-    // Check if card details are present
-    if (isset($result->transaction->creditCard)) {
-        $cardType = $result->transaction->creditCard['cardType'] ?? 'Unknown'; // Accessing as an array
-    }
-
-    $stmt = $pdo->prepare("INSERT INTO transactions (firstname, lastname, amount, transaction_id, status, card_type) VALUES (?, ?, ?, ?, ?, ?)");
-    $stmt->execute([
-        $_POST['firstname'],
-        $_POST['lastname'],
-        $_POST['amount'],
-        $result->transaction->id,
-        'successful',
-        $cardType // Store the specific card type
+if ($customerResult->success) {
+    $paymentMethodResult = $gateway->paymentMethod()->create([
+        'customerId' => $customerResult->customer->id,
+        'paymentMethodNonce' => $_POST['payment_method_nonce'], 
+        'options' => [
+            'verifyCard' => true,
+        ]
     ]);
+
+    if ($paymentMethodResult->success) {
+        $paymentMethodToken = $paymentMethodResult->paymentMethod->token;
+
+        $transactionResult = $gateway->transaction()->sale([
+            'amount' => $_POST['amount'],
+            'paymentMethodToken' => $paymentMethodToken,
+            'options' => [
+                'submitForSettlement' => true
+            ]
+        ]);
+
+        if ($transactionResult->success) {
+            $cardType = isset($transactionResult->transaction->creditCard) ? 
+                        $transactionResult->transaction->creditCard['cardType'] : 
+                        'Unknown';
+
+            $stmt = $pdo->prepare("INSERT INTO transactions (firstname, lastname, customer_id, cardholder_name, amount, transaction_id, status, card_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([
+                $_POST['firstname'],
+                $_POST['lastname'],
+                $customerResult->customer->id,
+                $_POST['cardholder_name'],
+                $_POST['amount'],
+                $transactionResult->transaction->id,
+                'successful',
+                $cardType
+            ]);
+        } else {
+            echo "Transaction Error: " . $transactionResult->message;
+            print_r($transactionResult->errors);
+            die();
+        }
+    } else {
+        echo "Payment Method Creation Error: " . $paymentMethodResult->message;
+        print_r($paymentMethodResult->errors);
+        die();
+    }
 } else {
-    echo "Error: " . $result->message;
-    print_r($result->errors);
+    echo "Customer Creation Error: " . $customerResult->message;
+    print_r($customerResult->errors);
     die();
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -69,7 +94,7 @@ if ($result->success === true) {
 <body>
     <form class="payment-form">
         <label for="Id" class="heading">Transaction Id</label><br>
-        <input type="text" disabled="disabled" name="Id" value="<?php echo htmlspecialchars($result->transaction->id); ?>"><br>
+        <input type="text" disabled="disabled" name="Id" value="<?php echo htmlspecialchars($transactionResult->transaction->id); ?>"><br>
         <label for="status" class="heading">Status</label><br>
         <input type="text" disabled="disabled" name="status" value="successful"><br>
         <label for="card_type" class="heading">Card Type</label><br>
